@@ -1,0 +1,236 @@
+import pygame
+from pygame.locals import *
+import random
+import sys
+import math
+import numpy as np
+from pygame.locals import (K_UP, K_DOWN, K_LEFT, K_RIGHT, K_ESCAPE, KEYDOWN,
+                           QUIT, RLEACCEL)
+
+pygame.init()
+info = pygame.display.Info()
+SCREEN_WIDTH,SCREEN_HEIGHT = info.current_w,info.current_h
+screen = pygame.display.set_mode((0,0), pygame.FULLSCREEN)
+
+class Player(pygame.sprite.Sprite):
+    '''Player Class'''
+    def __init__(self):
+        super(Player, self).__init__()
+        self.surf = pygame.Surface((10,10))
+        self.colour = (255,255,255)
+        self.surf.fill(self.colour)
+        self.rect = self.surf.get_rect(center = (0, SCREEN_HEIGHT/2))
+        self.health = 10
+        
+    def update(self, pressed_keys):
+        if pressed_keys[K_UP]:
+            self.rect.move_ip(0, -3)
+        if pressed_keys[K_DOWN]:
+            self.rect.move_ip(0, 3)
+        if pressed_keys[K_RIGHT]:
+            self.rect.move_ip(3, 0)
+        if pressed_keys[K_LEFT]:
+            self.rect.move_ip(-3, 0)
+        if self.rect.left < 0:
+            self.rect.left = 0
+        if self.rect.right > SCREEN_WIDTH:
+            self.rect.right = SCREEN_WIDTH
+        if self.rect.top < 0:
+            self.rect.top = 0
+        if self.rect.bottom > SCREEN_HEIGHT:
+            self.rect.bottom = SCREEN_HEIGHT
+        self.surf.fill(self.colour)
+        self.colour = list(self.colour)
+        for i in range(3):
+            if self.colour[i] != 255:
+                self.colour[i] = self.colour[i]+math.ceil((255-self.colour[i])*1/15)
+        
+
+
+class Enemy(pygame.sprite.Sprite):
+    '''Enemy Class'''
+    def __init__(self):
+        super(Enemy, self).__init__()
+        
+    def update(self):
+        if self.rect.right < 0:
+            self.kill()
+
+class Bullet(Enemy):
+    '''Enemy Subclass: Standard Projectile'''
+    def __init__(self, radius, colour, speed, height, height_variation = 0):
+        super().__init__()
+        self.surf = pygame.Surface((radius*2,radius*2))
+        center = (radius,radius)
+        pygame.draw.circle(self.surf, colour, center, radius)
+        self.rect = self.surf.get_rect(center=(SCREEN_WIDTH+50,height))
+        self.speed = speed
+        self.height_variation = height_variation
+    def update(self):
+        super().update()
+        self.rect.move_ip(-self.speed,self.height_variation)
+
+class Ray(Enemy):
+    '''Enemy Subclass'''
+    def __init__(self,height,colour,y,charge):
+        super().__init__()
+        self.surf = pygame.Surface((SCREEN_WIDTH, height))
+        self.surf.fill(colour)
+        self.rect = self.surf.get_rect(center=(SCREEN_WIDTH, y))
+        self.speed = 50
+        self.charge = charge
+    
+    def update(self):
+        super().update()
+        self.rect.move_ip(-self.speed,0)
+        if self.rect.left <0:
+            self.charge.kill()
+
+class Charge(pygame.sprite.Sprite):
+    '''Warning Class'''
+    def __init__(self,height,colour,y,rate):
+        super(Charge,self).__init__()
+        self.surf = pygame.Surface((SCREEN_WIDTH, height),pygame.SRCALPHA)
+        self.surf.fill(colour)
+        self.colour = list((colour))
+        self.rect = self.surf.get_rect(center = (SCREEN_WIDTH/2, y))
+        self.height = height
+        self.y = y
+        self.fired = False
+        self.rate = rate
+
+    def update(self):
+        for i in range(4):
+            if self.colour[i] != 255:
+                self.colour[i] = self.colour[i]+math.ceil((255-self.colour[i])*self.rate)
+            self.surf.fill(self.colour)
+        if self.colour == [255,255,255,255]:
+            if self.fired == False:
+                new_enemy = Ray(self.height,(171,0,0),self.y,self)
+                enemies.add(new_enemy)
+                all_sprites.add(new_enemy)
+                self.surf.blit(new_enemy.surf,new_enemy.rect)
+                self.fired = True
+                
+class Tracer(pygame.sprite.Sprite):
+    '''Warning Class'''
+    def __init__(self,height,colour,y):
+        super(Tracer,self).__init__()
+        self.surf = pygame.Surface((SCREEN_WIDTH, height),pygame.SRCALPHA)
+        self.surf.fill(colour)
+        self.original_image = self.surf
+        self.image = self.original_image
+        self.colour = list((colour))
+        self.rect = self.surf.get_rect(center = (SCREEN_WIDTH/2, y))
+        self.height = height
+        self.y = y
+        self.angle = 0
+        self.fired = False
+    def update(self):
+        self.image = pygame.transform.rotate(self.original_image, self.angle)
+        self.rect = self.image.get_rect(center = self.rect.center)
+        self.angle = (self.angle + 1) % 360
+
+            
+clock = pygame.time.Clock()
+cooldown = 250
+last_event_time = pygame.time.get_ticks()
+real_time = pygame.time.get_ticks()
+
+fight = 1
+nextevent = 1
+
+STAGE1 = pygame.USEREVENT + 1
+STAGE2 = pygame.USEREVENT + 2
+STAGE3 = pygame.USEREVENT + 3
+STAGE4 = pygame.USEREVENT + 4
+
+player1 = Player()
+all_sprites = pygame.sprite.Group()
+enemies = pygame.sprite.Group()
+decor = pygame.sprite.Group()
+all_sprites.add(player1)
+
+running = True
+while running:
+    for event in pygame.event.get():
+        
+        if event.type == KEYDOWN:
+            if event.key == K_ESCAPE:
+                running = False
+                
+        elif event.type == pygame.QUIT:
+            running = False
+
+        if fight == 1:
+            if nextevent == 0:
+                nextevent = 1
+                
+            if nextevent == 1:
+                pygame.time.set_timer(STAGE1, 100, 1)
+                if event.type == STAGE1:
+                    for i in range(31):
+                        new_enemy = Bullet(5,(204,51,17),5,SCREEN_HEIGHT/32*(i+1))
+                        enemies.add(new_enemy)
+                        all_sprites.add(new_enemy)
+                    pygame.time.delay(3000)
+                    nextevent = 2
+                    
+            if nextevent == 2:
+                pygame.time.set_timer(STAGE2, 300, 1)
+                if event.type == STAGE2:
+                    for i in range(32):
+                        new_enemy = Bullet(5,(204,51,17),7,SCREEN_HEIGHT/33*(i+1))
+                        enemies.add(new_enemy)
+                        all_sprites.add(new_enemy)
+                    for i in range(4):
+                        new_decor = Charge(20,(195,19,36,0),SCREEN_HEIGHT/5*(i+1),1/20)
+                        decor.add(new_decor)
+                    for i in range(6):
+                        new_enemy = Bullet(30,(54,171,206),4,SCREEN_HEIGHT/7*(i+1))
+                        enemies.add(new_enemy)
+                        all_sprites.add(new_enemy)
+                    nextevent = 3
+                    
+            if nextevent == 3:
+                pygame.time.set_timer(STAGE3, 1000, 1)
+                if event.type == STAGE3:
+                    new_decor = Charge(50,(171,0,0,0),SCREEN_HEIGHT/2,1/20)
+                    decor.add(new_decor)
+                    for i in range(26):
+                        new_enemy = Bullet(5,(163,108,230),5,SCREEN_HEIGHT/27*(i+1))
+                        enemies.add(new_enemy)
+                        all_sprites.add(new_enemy)
+                    nextevent = 4
+
+            if nextevent == 4:
+                pygame.time.set_timer(STAGE4, 1000, 1)
+                if event.type == STAGE4:
+                    pass
+
+    pressed_keys = pygame.key.get_pressed()
+    player1.update(pressed_keys)
+    enemies.update()
+    decor.update()
+    screen.fill((0, 0, 0))
+    for entity in all_sprites:
+        screen.blit(entity.surf, entity.rect)
+    for entity in decor:
+        screen.blit(entity.surf, entity.rect)
+    if pygame.sprite.spritecollideany(player1, enemies):
+        current_time = pygame.time.get_ticks()
+        if current_time - last_event_time >= cooldown:
+            player1.health -= 1
+            player1.colour = (255,0,0)
+            last_event_time = current_time
+            print('Collision')
+        else:
+            print('Cooldown')
+    if player1.health < 1:
+        player1.kill()
+        print('Game Over')
+        running = False
+    pygame.display.flip()
+    clock.tick(60)
+pygame.quit()
+sys.exit()
